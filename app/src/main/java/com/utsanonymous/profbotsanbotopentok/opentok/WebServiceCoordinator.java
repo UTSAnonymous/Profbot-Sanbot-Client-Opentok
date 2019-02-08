@@ -1,4 +1,4 @@
-package com.utsanonymous.profbotandroidopentok;
+package com.utsanonymous.profbotsanbotopentok.opentok;
 
 import android.content.Context;
 import android.util.Log;

@@ -2,23 +2,33 @@ package com.utsanonymous.profbotsanbotopentok;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.Intent;
-import android.graphics.PixelFormat;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.hardware.usb.UsbDevice;
+import android.media.AudioManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Looper;
 import android.support.annotation.NonNull;
-import android.support.v7.app.AppCompatActivity;
+import android.support.v7.app.AlertDialog;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.SeekBar;
 import android.widget.Toast;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.jiangdg.usbcamera.UVCCameraHelper;
+import com.jiangdg.usbcamera.utils.FileUtils;
 import com.opentok.android.BaseVideoRenderer;
 import com.opentok.android.OpentokError;
 import com.opentok.android.Publisher;
@@ -30,34 +40,47 @@ import com.opentok.android.SubscriberKit;
 import com.opentok.android.VideoUtils;
 import com.pubnub.api.PNConfiguration;
 import com.pubnub.api.PubNub;
+import com.pubnub.api.callbacks.PNCallback;
 import com.pubnub.api.callbacks.SubscribeCallback;
 import com.pubnub.api.enums.PNStatusCategory;
+import com.pubnub.api.models.consumer.PNPublishResult;
 import com.pubnub.api.models.consumer.PNStatus;
 import com.pubnub.api.models.consumer.pubsub.PNMessageResult;
 import com.pubnub.api.models.consumer.pubsub.PNPresenceEventResult;
 import com.sanbot.opensdk.base.TopBaseActivity;
 import com.sanbot.opensdk.beans.FuncConstant;
+import com.sanbot.opensdk.beans.OperationResult;
+import com.sanbot.opensdk.function.beans.FaceRecognizeBean;
+import com.sanbot.opensdk.function.beans.LED;
+import com.sanbot.opensdk.function.beans.StreamOption;
 import com.sanbot.opensdk.function.beans.wheelmotion.NoAngleWheelMotion;
+import com.sanbot.opensdk.function.unit.HDCameraManager;
 import com.sanbot.opensdk.function.unit.HardWareManager;
+import com.sanbot.opensdk.function.unit.SystemManager;
 import com.sanbot.opensdk.function.unit.WheelMotionManager;
+import com.sanbot.opensdk.function.unit.interfaces.hardware.ObstacleListener;
+import com.sanbot.opensdk.function.unit.interfaces.media.FaceRecognizeListener;
+import com.sanbot.opensdk.function.unit.interfaces.media.MediaStreamListener;
 import com.serenegiant.usb.CameraDialog;
-import com.serenegiant.usb.IFrameCallback;
 import com.serenegiant.usb.USBMonitor;
 import com.serenegiant.usb.UVCCamera;
+import com.serenegiant.usb.common.AbstractUVCCameraHandler;
+import com.serenegiant.usb.widget.CameraViewInterface;
+import com.utsanonymous.profbotsanbotopentok.opentok.CustomWebcamCapturer;
+import com.utsanonymous.profbotsanbotopentok.opentok.OpenTokConfig;
+import com.utsanonymous.profbotsanbotopentok.util.Constants;
+
+import org.json.JSONObject;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
 
-import static com.utsanonymous.profbotsanbotopentok.R.id.camera_surface_view;
-import static com.utsanonymous.profbotsanbotopentok.R.id.publisher_container;
 import static com.utsanonymous.profbotsanbotopentok.R.id.subscriber_container;
 import static com.utsanonymous.profbotsanbotopentok.R.layout.activity_call;
 
@@ -68,7 +91,8 @@ public class CallActivity extends TopBaseActivity
         Session.SessionListener,
         PublisherKit.PublisherListener,
         SubscriberKit.SubscriberListener,
-        CameraDialog.CameraDialogParent {
+        CameraDialog.CameraDialogParent,
+        CameraViewInterface.Callback{
 
     private static final String LOG_TAG = "CallActivity";
     private static final int RC_VIDEO_APP_PERM = 124;
@@ -78,37 +102,71 @@ public class CallActivity extends TopBaseActivity
     private PublisherKit mPublisher;
     private Subscriber mSubscriber;
 
-    private FrameLayout mPublisherViewContainer;
     private FrameLayout mSubscriberViewContainer;
 
     //for SanbotOpenSDK
     private WheelMotionManager wheelMotionManager;
     private HardWareManager hardWareManager;
+    private SystemManager systemManager;
 
     //for pubnub
     private PubNub mPubNub;
     private String robotname;
     private String roomId;
 
-    //======External Camera Support=======//
-    //UVCCamera API
-    private com.utsanonymous.profbotandroidopentok.CustomWebcamCapturer mCapturer;
-    private USBMonitor mUSBMonitor;
-    private UVCCamera mUVCCamera;
-    private SurfaceView mUVCCameraView;
-    // for open&start / stop&close camera preview
-    private Surface mPreviewSurface;
-    private boolean isActive, isPreview;
+    //FOR Jiang test
+    private UVCCameraHelper mCameraHelper;
+    private CameraViewInterface mUVCCameraView;
+    private TextureView mTextureView;
 
-    //For thread pool
-    private static final int CORE_POOL_SIZE = 1;		// initial/minimum threads
-    private static final int MAX_POOL_SIZE = 4;			// maximum threads
-    private static final int KEEP_ALIVE_TIME = 10;		// time periods while keep the idle thread
-    protected static final ThreadPoolExecutor EXECUTER
-            = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_TIME,
-            TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+    private boolean isRequest;
+    private boolean isPreview;
+    private boolean isSubscribing;
 
-    private final Object mSync = new Object();
+    //Custom webcam capturer
+    private CustomWebcamCapturer mCapturer;
+
+    //Listener for Jiang Camera Helper class
+    // This listener handles all of the USB connection for external Webcam
+    private UVCCameraHelper.OnMyDevConnectListener listener = new UVCCameraHelper.OnMyDevConnectListener() {
+
+        @Override
+        public void onAttachDev(UsbDevice device) {
+            if (mCameraHelper == null || mCameraHelper.getUsbDeviceCount() == 0) {
+                return;
+            }
+            // request open permission
+            if (!isRequest) {
+                isRequest = true;
+                if (mCameraHelper != null) {
+                    mCameraHelper.requestPermission(0);
+                }
+            }
+        }
+
+        @Override
+        public void onDettachDev(UsbDevice device) {
+            // close camera
+            if (isRequest) {
+                isRequest = false;
+                mCameraHelper.closeCamera();
+            }
+        }
+
+        @Override
+        public void onConnectDev(UsbDevice device, boolean isConnected) {
+            if (!isConnected) {
+                isPreview = false;
+            } else {
+                isPreview = true;
+                logAndToast("Connected to :" + device.getProductName());
+            }
+        }
+
+        @Override
+        public void onDisConnectDev(UsbDevice device){
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -120,25 +178,38 @@ public class CallActivity extends TopBaseActivity
         setContentView(activity_call);
 
         //Initialize view
-        mPublisherViewContainer = (FrameLayout)findViewById(publisher_container);
         mSubscriberViewContainer = (FrameLayout)findViewById(subscriber_container);
-        mUVCCameraView = (SurfaceView) findViewById(camera_surface_view);
+        mTextureView = (TextureView)findViewById(R.id.camera_view);
 
         // Initialize SanbotOpenSDK classes
         wheelMotionManager = (WheelMotionManager) getUnitManager(FuncConstant.WHEELMOTION_MANAGER);
         hardWareManager = (HardWareManager)getUnitManager(FuncConstant.HARDWARE_MANAGER);
+        systemManager = (SystemManager) getUnitManager(FuncConstant.SYSTEM_MANAGER);
 
-        //Initialize view for external camera output(not shown on screen)
-        SurfaceHolder mUVCCameraViewHolder = mUVCCameraView.getHolder();
-        mUVCCameraViewHolder.setFormat(PixelFormat.TRANSPARENT);
-        mUVCCameraViewHolder.addCallback(mSurfaceViewCallback);
+        // step.1 initialize UVCCameraHelper
+        mUVCCameraView = (CameraViewInterface) mTextureView;
+        mUVCCameraView.setCallback(this);
+        mCameraHelper = UVCCameraHelper.getInstance();
+        mCameraHelper.setDefaultPreviewSize(320,240); //424,240
+        mCameraHelper.setDefaultFrameFormat(UVCCameraHelper.FRAME_FORMAT_YUYV);
+        mCameraHelper.initUSBMonitor(this, mUVCCameraView, listener);
+        isSubscribing = false;
 
-        mUSBMonitor = new USBMonitor(this, mOnDeviceConnectListener);
+        mCameraHelper.setOnPreviewFrameListener(new AbstractUVCCameraHandler.OnPreViewResultListener() {
+            @Override
+            public void onPreviewResult(byte[] nv21Yuv) {
+                if(mPublisher != null){
+                    if(isSubscribing){
+                        mCapturer.addFrame(nv21Yuv);
+                    }
+                }
+            }
+        });
 
         // Get Intent parameters.
         final Intent intent = getIntent();
-        String room = intent.getStringExtra(com.utsanonymous.profbotrobotclient.util.Constants.ROBOT_ROOM);
-        this.robotname = intent.getStringExtra(com.utsanonymous.profbotrobotclient.util.Constants.ROBOT_NAME_KEY);
+        String room = intent.getStringExtra(Constants.ROBOT_ROOM);
+        this.robotname = intent.getStringExtra(Constants.ROBOT_NAME_KEY);
 
         String chn = this.robotname + room;
         this.roomId = chn.replaceAll("[\\s\\.]","");
@@ -167,18 +238,43 @@ public class CallActivity extends TopBaseActivity
     //=========================================================================================//
 
     @Override
-    public void onResume() {
-        super.onResume();
-        mUSBMonitor.register();
-        mSession.onResume();
-        mPubNub.reconnect();
+    protected void onDestroy() {
+        super.onDestroy();
+        // step.4 release uvc camera resources
+        if (mCameraHelper != null) {
+            mCameraHelper.release();
+        }
+    }    @Override
+    protected void onStart() {
+        super.onStart();
+        // step.2 register USB event broadcast
+        if (mCameraHelper != null) {
+            mCameraHelper.registerUSB();
+        }
     }
+
     @Override
-    protected void onPause() {
-        super.onPause();
-        mUSBMonitor.unregister();
-        mSession.onPause();
-        mPubNub.disconnect();
+    protected void onStop() {
+        super.onStop();
+        // step.3 unregister USB event broadcast
+        if (mCameraHelper != null) {
+            mCameraHelper.unregisterUSB();
+        }
+    }
+
+    public void disconnectButton(View view){
+        if(mPubNub != null){
+            mPubNub.disconnect();
+        }
+        if (mCameraHelper != null) {
+            mCameraHelper.release();
+            mCameraHelper.closeCamera();
+            mCameraHelper.unregisterUSB();
+        }
+        if(mSession != null){
+            mSession.disconnect();
+            finish();
+        }
     }
 
     /**
@@ -190,10 +286,9 @@ public class CallActivity extends TopBaseActivity
     @AfterPermissionGranted(RC_VIDEO_APP_PERM)
     public void requestPermission(){
 
-        String[] perms = { Manifest.permission.INTERNET, Manifest.permission.CAMERA};
+        String[] perms = { Manifest.permission.INTERNET, Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
         if(EasyPermissions.hasPermissions(this,perms)){
             initializeSession();
-            initializePublisher();
         }
         else{
             EasyPermissions.requestPermissions(this,getString(R.string.rationale_video_app), RC_VIDEO_APP_PERM, perms);
@@ -222,65 +317,41 @@ public class CallActivity extends TopBaseActivity
     //=========================================================================================//
 
     public void initializeSession(){
-        mSession = new Session.Builder(this, com.utsanonymous.profbotandroidopentok.OpenTokConfig.API_KEY, com.utsanonymous.profbotandroidopentok.OpenTokConfig.SESSION_ID).build();
+        mSession = new Session.Builder(this, OpenTokConfig.API_KEY, OpenTokConfig.SESSION_ID).build();
         mSession.setSessionListener(this);
-        mSession.connect(com.utsanonymous.profbotandroidopentok.OpenTokConfig.TOKEN);
+        mSession.connect(OpenTokConfig.TOKEN);
     }
 
     public void initializePublisher(){
-        mPublisher = new Publisher.Builder(this).build();
-        mPublisher.setCapturer(new com.utsanonymous.profbotandroidopentok.CustomWebcamCapturer(this));
+        mPublisher = new Publisher.Builder(this)
+                .audioTrack(true)
+                .capturer(new CustomWebcamCapturer(this))
+                .build();
+        mPublisher.setPublishAudio(true);
         mPublisher.setPublisherListener(this);
-        mPublisher.getRenderer().setStyle(BaseVideoRenderer.STYLE_VIDEO_SCALE, BaseVideoRenderer.STYLE_VIDEO_FIT);
-        mPublisherViewContainer.addView(mPublisher.getView());
     }
 
     @Override
     public void onConnected(Session session) {
-        logAndToast("Session connected :" + session.getSessionId());
-
-
-        if (mUVCCamera == null) {
-            // XXX calling CameraDialog.showDialog is necessary at only first time(only when app has no permission).
-            CameraDialog.showDialog(this);
-        } else {
-            synchronized (mSync) {
-                mUVCCamera.destroy();
-                mUVCCamera = null;
-                isActive = isPreview = false;
-            }
-        }
-
+        initializePublisher();
         if (mPublisher != null) {
             mSession.publish(mPublisher);
         }
+        mCapturer = (CustomWebcamCapturer) mPublisher.getCapturer();
+        mCapturer.addFrame(null);
     }
 
     @Override
     public void onDisconnected(Session session) {
-        logAndToast("Session disconnected");
 
-        synchronized (mSync) {
-            if (mUVCCamera != null) {
-                mUVCCamera.destroy();
-                mUVCCamera = null;
-            }
-            isActive = isPreview = false;
-        }
-        if (mUSBMonitor != null) {
-            mUSBMonitor.destroy();
-            mUSBMonitor = null;
-        }
-        mUVCCameraView = null;
     }
 
     @Override
     public void onStreamReceived(Session session, Stream stream) {
-
+        isSubscribing = true;
         if(mSubscriber == null){
             mSubscriber = new Subscriber.Builder(this, stream).build();
-            mSubscriber.getRenderer().setStyle(BaseVideoRenderer.STYLE_VIDEO_SCALE, BaseVideoRenderer.STYLE_VIDEO_FIT);
-            mSubscriber.setPreferredFrameRate((float) 20);
+            mSubscriber.getRenderer().setStyle(BaseVideoRenderer.STYLE_VIDEO_SCALE, BaseVideoRenderer.STYLE_VIDEO_FILL);
             mSubscriber.setPreferredResolution(new VideoUtils.Size(680,480));
             mSession.subscribe(mSubscriber);
             mSubscriberViewContainer.addView(mSubscriber.getView());
@@ -290,7 +361,7 @@ public class CallActivity extends TopBaseActivity
     @Override
     public void onStreamDropped(Session session, Stream stream) {
         log("Stream Dropped");
-
+        isSubscribing = false;
         if (mSubscriber != null) {
             mSubscriber = null;
             mSubscriberViewContainer.removeAllViews();
@@ -322,7 +393,7 @@ public class CallActivity extends TopBaseActivity
 
     @Override
     public void onError(PublisherKit publisherKit, OpentokError opentokError) {
-        logAndToast("Publishing error :" + opentokError.getMessage());
+        log("Publishing error :" + opentokError.getMessage());
     }
 
     /**
@@ -373,176 +444,41 @@ public class CallActivity extends TopBaseActivity
     //=========================================================================================//
     //=========================================================================================//
 
-    private final USBMonitor.OnDeviceConnectListener mOnDeviceConnectListener = new USBMonitor.OnDeviceConnectListener() {
-        @Override
-        public void onAttach(final UsbDevice device) {
-            Toast.makeText(getApplicationContext(), "USB_DEVICE_ATTACHED", Toast.LENGTH_SHORT).show();
-        }
-
-        @Override
-        public void onConnect(final UsbDevice device, final USBMonitor.UsbControlBlock ctrlBlock, final boolean createNew) {
-            synchronized (mSync) {
-                if (mUVCCamera != null)
-                    mUVCCamera.destroy();
-                isActive = isPreview = false;
-            }
-            EXECUTER.execute(new Runnable() {
-                @Override
-                public void run() {
-                    synchronized (mSync) {
-                        mUVCCamera = new UVCCamera();
-                        mUVCCamera.open(ctrlBlock);
-
-                        try {
-                            mUVCCamera.setPreviewSize(UVCCamera.DEFAULT_PREVIEW_WIDTH, UVCCamera.DEFAULT_PREVIEW_HEIGHT, UVCCamera.FRAME_FORMAT_MJPEG);
-                        } catch (final IllegalArgumentException e) {
-                            try {
-                                // fallback to YUV mode
-                                mUVCCamera.setPreviewSize(UVCCamera.DEFAULT_PREVIEW_WIDTH, UVCCamera.DEFAULT_PREVIEW_HEIGHT, UVCCamera.DEFAULT_PREVIEW_MODE);
-                            } catch (final IllegalArgumentException e1) {
-                                mUVCCamera.destroy();
-                                mUVCCamera = null;
-                            }
-                        }
-                        if ((mUVCCamera != null) && (mPreviewSurface != null)) {
-                            isActive = true;
-                            mUVCCamera.setPreviewDisplay(mPreviewSurface);
-                            mUVCCamera.setFrameCallback(mIFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP);
-                            mUVCCamera.startPreview();
-                            isPreview = true;
-                        }
-                    }
-                }
-            });
-        }
-
-        @Override
-        public void onDisconnect(final UsbDevice device, final USBMonitor.UsbControlBlock ctrlBlock) {
-            // XXX you should check whether the comming device equal to camera device that currently using
-
-            synchronized (mSync) {
-                if (mUVCCamera != null) {
-                    mUVCCamera.close();
-                    if (mPreviewSurface != null) {
-                        mPreviewSurface.release();
-                        mPreviewSurface = null;
-                    }
-                    isActive = isPreview = false;
-                }
-            }
-        }
-
-        @Override
-        public void onCancel(UsbDevice usbDevice) {
-
-        }
-
-        @Override
-        public void onDettach(final UsbDevice device) {
-
-            Toast.makeText(getApplicationContext(), "USB_DEVICE_DETACHED", Toast.LENGTH_SHORT).show();
-        }
-
-    };
-
+    @Override
     public USBMonitor getUSBMonitor() {
-
-        log("getUSBMonitor");
-        mCapturer = (com.utsanonymous.profbotandroidopentok.CustomWebcamCapturer) mPublisher.getCapturer();
-        mCapturer.addFrame(null);
-
-        new Thread(new MyThread(mCapturer)).start();
-
-        return mUSBMonitor;
+        return mCameraHelper.getUSBMonitor();
     }
 
     @Override
-    public void onDialogResult(boolean b) {
-
-    }
-
-    class MyThread implements Runnable {
-        private com.utsanonymous.profbotandroidopentok.CustomWebcamCapturer mCapturer;
-        private Long lastCameraTime = 0L;
-        public MyThread(com.utsanonymous.profbotandroidopentok.CustomWebcamCapturer cap) {
-            mCapturer = cap;
-        }
-
-        @Override
-        public void run() {
-            while(true){
-
-                byte[] capArray = null;
-                imageArrayLock.lock();
-
-                if(lastCameraTime != imageTime){
-                    lastCameraTime = System.currentTimeMillis();
-                    capArray = imageArray;
-                }
-                imageArrayLock.unlock();
-                mCapturer.addFrame(capArray);
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
+    public void onDialogResult(boolean canceled) {
+        if (canceled) {
         }
     }
 
-    private final SurfaceHolder.Callback mSurfaceViewCallback = new SurfaceHolder.Callback() {
-        @Override
-        public void surfaceCreated(final SurfaceHolder holder) {
+    public boolean isCameraOpened() {
+        return mCameraHelper.isCameraOpened();
+    }
+
+    @Override
+    public void onSurfaceCreated(CameraViewInterface view, Surface surface) {
+        if (!isPreview && mCameraHelper.isCameraOpened()) {
+            mCameraHelper.startPreview(mUVCCameraView);
+            isPreview = true;
         }
+    }
 
-        @Override
-        public void surfaceChanged(final SurfaceHolder holder, final int format, final int width, final int height) {
-            if ((width == 0) || (height == 0)) return;
+    @Override
+    public void onSurfaceChanged(CameraViewInterface view, Surface surface, int width, int height) {
 
-            mPreviewSurface = holder.getSurface();
-            synchronized (mSync) {
-                if (isActive && !isPreview) {
-                    mUVCCamera.setPreviewDisplay(mPreviewSurface);
-                    mUVCCamera.startPreview();
-                    isPreview = true;
-                }
-            }
+    }
+
+    @Override
+    public void onSurfaceDestroy(CameraViewInterface view, Surface surface) {
+        if (isPreview && mCameraHelper.isCameraOpened()) {
+            mCameraHelper.stopPreview();
+            isPreview = false;
         }
-
-        @Override
-        public void surfaceDestroyed(final SurfaceHolder holder) {
-
-            synchronized (mSync) {
-                if (mUVCCamera != null) {
-                    mUVCCamera.stopPreview();
-                }
-                isPreview = false;
-            }
-            mPreviewSurface = null;
-        }
-    };
-
-    private byte[] imageArray = null;
-    private Long imageTime = 0L;
-    private ReentrantLock imageArrayLock = new ReentrantLock();
-    private final IFrameCallback mIFrameCallback = new IFrameCallback() {
-        @Override
-        public void onFrame(final ByteBuffer frame) {
-            imageArrayLock.lock();
-
-            imageArray = new byte[frame.remaining()];
-            frame.get(imageArray);
-
-            if (imageArray == null) {
-                log("onFrame Lock NULL");
-            } else {
-//                Log.d(TAG, "onFrame Lock ");
-            }
-
-            imageTime = System.currentTimeMillis();
-            imageArrayLock.unlock();
-        }
-    };
+    }
 
     /**
      * Pubnub Callbacks and functions
@@ -589,7 +525,7 @@ public class CallActivity extends TopBaseActivity
                     if(data.isJsonObject()){
                         JsonObject jsonObject1 = data.getAsJsonObject();
 
-                        msg = jsonObject1.get(com.utsanonymous.profbotrobotclient.util.Constants.JSON_MESSAGE);
+                        msg = jsonObject1.get(Constants.JSON_MESSAGE);
                     }
                 }
 
@@ -613,6 +549,15 @@ public class CallActivity extends TopBaseActivity
                 .execute();
     }
 
+    public void publishPubNub(JSONObject data){
+        mPubNub.publish().channel(this.roomId).message(data).async(new PNCallback<PNPublishResult>() {
+            @Override
+            public void onResponse(PNPublishResult result, PNStatus status) {
+                log("Acknowledge PubNub publish is successful");
+            }
+        });
+    }
+
     /**
      * Sanbot SDK methods and functions
      */
@@ -621,7 +566,7 @@ public class CallActivity extends TopBaseActivity
 
     @Override
     protected void onMainServiceConnected() {
-
+        systemManager.switchFloatBar(false, CallActivity.class.getName());
     }
 
     private void wheelCommands(String movement){
@@ -629,31 +574,31 @@ public class CallActivity extends TopBaseActivity
         switch(movement) {
             case "forward":
                 NoAngleWheelMotion noAngleWheelMotion1 = new NoAngleWheelMotion(
-                        NoAngleWheelMotion.ACTION_FORWARD_RUN, 8,40
+                        NoAngleWheelMotion.ACTION_FORWARD_RUN, 3,30
                 );
                 wheelMotionManager.doNoAngleMotion(noAngleWheelMotion1);
                 break;
             case "right":
                 NoAngleWheelMotion noAngleWheelMotion2 = new NoAngleWheelMotion(
-                        NoAngleWheelMotion.ACTION_RIGHT_CIRCLE, 8,40
+                        NoAngleWheelMotion.ACTION_RIGHT_CIRCLE, 3,30
                 );
                 wheelMotionManager.doNoAngleMotion(noAngleWheelMotion2);
                 break;
             case "left":
                 NoAngleWheelMotion noAngleWheelMotion3 = new NoAngleWheelMotion(
-                        NoAngleWheelMotion.ACTION_LEFT_CIRCLE, 8,20
+                        NoAngleWheelMotion.ACTION_LEFT_CIRCLE, 3,30
                 );
                 wheelMotionManager.doNoAngleMotion(noAngleWheelMotion3);
                 break;
             case "backwards":
                 NoAngleWheelMotion noAngleWheelMotion4 = new NoAngleWheelMotion(
-                        NoAngleWheelMotion.ACTION_BACK_RUN, 8,40
+                        NoAngleWheelMotion.ACTION_BACK_RUN, 3,30
                 );
                 wheelMotionManager.doNoAngleMotion(noAngleWheelMotion4);
                 break;
             case "stop":
                 NoAngleWheelMotion noAngleWheelMotion5 = new NoAngleWheelMotion(
-                        NoAngleWheelMotion.ACTION_STOP_RUN, 8,20
+                        NoAngleWheelMotion.ACTION_STOP_RUN, 8,30
                 );
                 wheelMotionManager.doNoAngleMotion(noAngleWheelMotion5);
                 break;

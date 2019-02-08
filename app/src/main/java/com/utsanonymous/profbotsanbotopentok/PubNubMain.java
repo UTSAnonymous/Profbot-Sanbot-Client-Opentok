@@ -1,4 +1,4 @@
-package com.utsanonymous.profbotrobotclient;
+package com.utsanonymous.profbotsanbotopentok;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -17,7 +17,7 @@ import com.pubnub.api.models.consumer.PNPublishResult;
 import com.pubnub.api.models.consumer.PNStatus;
 import com.pubnub.api.models.consumer.pubsub.PNMessageResult;
 import com.pubnub.api.models.consumer.pubsub.PNPresenceEventResult;
-import com.utsanonymous.profbotrobotclient.util.Constants;
+import com.utsanonymous.profbotsanbotopentok.util.Constants;
 
 import org.json.JSONObject;
 

@@ -1,4 +1,4 @@
-package com.utsanonymous.profbotrobotclient.util;
+package com.utsanonymous.profbotsanbotopentok.util;
 
 public class Constants {
 

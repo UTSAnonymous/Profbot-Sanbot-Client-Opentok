@@ -8,10 +8,11 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 
+import com.jiangdg.usbcamera.UVCCameraHelper;
 import com.sanbot.opensdk.base.TopBaseActivity;
 import com.sanbot.opensdk.beans.FuncConstant;
 import com.sanbot.opensdk.function.unit.SystemManager;
-import com.utsanonymous.profbotrobotclient.util.Constants;
+import com.utsanonymous.profbotsanbotopentok.util.Constants;
 
 import pub.devrel.easypermissions.EasyPermissions;
 
@@ -23,6 +24,7 @@ public class LoginActivity extends TopBaseActivity {
     private static final int RC_CALL = 111;
 
     SystemManager systemManager;
+    private UVCCameraHelper mCameraHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +44,9 @@ public class LoginActivity extends TopBaseActivity {
 
         systemManager = (SystemManager) getUnitManager(FuncConstant.SYSTEM_MANAGER);
 
+        mCameraHelper = UVCCameraHelper.getInstance();
+        mCameraHelper.closeCamera();
+        mCameraHelper.unregisterUSB();
     }
 
         public void joinChannel (View view){

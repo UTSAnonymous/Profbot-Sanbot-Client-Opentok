@@ -3,8 +3,8 @@
     <dimen name="activity_horizontal_margin">16dp</dimen>
     <dimen name="activity_vertical_margin">16dp</dimen>
 
-    <dimen name="publisher_height">240dp</dimen>
-    <dimen name="publisher_width">320dp</dimen>
+    <dimen name="publisher_height">400dp</dimen>
+    <dimen name="publisher_width">560dp</dimen>
     <dimen name="publisher_end_margin">16dp</dimen>
     <dimen name="publisher_right_margin">16dp</dimen>
     <dimen name="publisher_left_margin">16dp</dimen>

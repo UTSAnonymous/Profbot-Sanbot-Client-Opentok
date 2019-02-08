@@ -1,4 +1,4 @@
-package com.utsanonymous.profbotandroidopentok;
+package com.utsanonymous.profbotsanbotopentok.opentok;
 
 import android.webkit.URLUtil;
 
@@ -9,9 +9,9 @@ public class OpenTokConfig {
     // Replace with your OpenTok API key
     public static final String API_KEY = "46253082";
     // Replace with a generated Session ID
-    public static final String SESSION_ID = "2_MX40NjI1MzA4Mn5-MTU0ODI4ODU2ODk1Mn5Ybk9QUTdiUUhrZWFJamlIS2d0THA1Snp-UH4";
+    public static final String SESSION_ID = "1_MX40NjI1MzA4Mn5-MTU0OTMzNjc5ODgzN35JR3AyT1Z4b1hYbHpmWmxMbWRpeTdZSkZ-UH4";
     // Replace with a generated token (from the dashboard or using an OpenTok server SDK)
-    public static final String TOKEN = "T1==cGFydG5lcl9pZD00NjI1MzA4MiZzaWc9NmY2OWFiMWE5YmYxYmUwNGE2NTI1OTJlMmJjMjk1NDZlY2RiZjZlMjpzZXNzaW9uX2lkPTJfTVg0ME5qSTFNekE0TW41LU1UVTBPREk0T0RVMk9EazFNbjVZYms5UVVUZGlVVWhyWldGSmFtbElTMmQwVEhBMVNucC1VSDQmY3JlYXRlX3RpbWU9MTU0ODMxMzY4MSZub25jZT0wLjg5MjU5NTMxMjAzMTcwMzQmcm9sZT1wdWJsaXNoZXImZXhwaXJlX3RpbWU9MTU1MDkwNTY4MCZpbml0aWFsX2xheW91dF9jbGFzc19saXN0PQ==";
+    public static final String TOKEN = "T1==cGFydG5lcl9pZD00NjI1MzA4MiZzaWc9OGU0MGIzMGFjYWE0ZTlmZjRlNDg5NmVhMjRjYjU0YWYzYzlkYmE0NTpzZXNzaW9uX2lkPTFfTVg0ME5qSTFNekE0TW41LU1UVTBPVE16TmpjNU9EZ3pOMzVKUjNBeVQxWjRiMWhZYkhwbVdteE1iV1JwZVRkWlNrWi1VSDQmY3JlYXRlX3RpbWU9MTU0OTMzNjg1OSZub25jZT0wLjA2MDE3MTU3NTQ0MzkzNDQ4JnJvbGU9cHVibGlzaGVyJmV4cGlyZV90aW1lPTE1NTE5Mjg4NTgmaW5pdGlhbF9sYXlvdXRfY2xhc3NfbGlzdD0=";
 
     /*                           ***** OPTIONAL *****
      If you have set up a server to provide session information replace the null value
